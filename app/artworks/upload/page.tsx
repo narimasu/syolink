@@ -135,10 +135,12 @@ export default function UploadPage() {
       const { error: uploadError } = await supabase.storage
         .from('artworks')
         .upload(filePath, uploadedFile, {
-          onUploadProgress: (progress) => {
-            setUploadProgress((progress.loaded / progress.total) * 100);
-          },
+          upsert: false, // 既存ファイルを上書きしない
+          contentType: uploadedFile.type // ファイルの正しいコンテンツタイプを設定
         });
+        
+      // アップロード後、進捗状況を100%に設定
+      setUploadProgress(100);
       
       if (uploadError) throw uploadError;
       
