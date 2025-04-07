@@ -126,6 +126,7 @@ export default function UploadPage() {
     
     try {
       setIsSubmitting(true);
+      setUploadProgress(10); // アップロード開始を示す
       
       // Storage にファイルをアップロード
       const fileExt = uploadedFile.name.split('.').pop();
@@ -135,19 +136,20 @@ export default function UploadPage() {
       const { error: uploadError } = await supabase.storage
         .from('artworks')
         .upload(filePath, uploadedFile, {
-          upsert: false, // 既存ファイルを上書きしない
-          contentType: uploadedFile.type // ファイルの正しいコンテンツタイプを設定
+          upsert: false,
+          contentType: uploadedFile.type
         });
-        
-      // アップロード後、進捗状況を100%に設定
-      setUploadProgress(100);
       
       if (uploadError) throw uploadError;
+      
+      setUploadProgress(70); // アップロード完了を示す
       
       // 画像の公開URLを取得
       const { data: publicUrl } = supabase.storage
         .from('artworks')
         .getPublicUrl(filePath);
+      
+      setUploadProgress(80); // URL取得完了を示す
       
       // データベースに作品情報を保存
       const { error: insertError } = await supabase
@@ -162,6 +164,8 @@ export default function UploadPage() {
         });
       
       if (insertError) throw insertError;
+      
+      setUploadProgress(100); // 完了を示す
       
       // 成功したらホームに戻る
       router.push('/');
