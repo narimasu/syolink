@@ -1,16 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSupabase } from '@/app/providers/supabase-provider';
+import { useRouter } from 'next/navigation';
 
 export default function Header() {
-  const { user, signOut } = useSupabase();
+  const { user, signOut, isLoading } = useSupabase();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const router = useRouter();
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
   };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.push('/');
+      // リロードして認証状態を更新
+      window.location.reload();
+    } catch (error) {
+      console.error('ログアウトエラー:', error);
+    }
+  };
+
+  useEffect(() => {
+    // デバッグ用: 認証状態のログ
+    console.log('Header auth state:', { user, isLoading });
+  }, [user, isLoading]);
 
   return (
     <header className="bg-white shadow-sm">
@@ -31,7 +49,7 @@ export default function Header() {
             <Link href="/themes" className="text-gray-600 hover:text-primary-500">
               月間お題
             </Link>
-            {user ? (
+            {!isLoading && user ? (
               <>
                 <Link href="/artworks/upload" className="btn-primary">
                   投稿する
@@ -48,7 +66,7 @@ export default function Header() {
                       プロフィール
                     </Link>
                     <button
-                      onClick={signOut}
+                      onClick={handleSignOut}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       ログアウト
@@ -116,7 +134,7 @@ export default function Header() {
               >
                 月間お題
               </Link>
-              {user ? (
+              {!isLoading && user ? (
                 <>
                   <Link
                     href="/artworks/upload"
@@ -134,7 +152,7 @@ export default function Header() {
                   </Link>
                   <button
                     onClick={() => {
-                      signOut();
+                      handleSignOut();
                       setIsMenuOpen(false);
                     }}
                     className="text-gray-600 hover:text-primary-500 text-left"

@@ -39,16 +39,22 @@ export default function SignUpPage() {
       setIsLoading(true);
       setError(null);
       
+      // signUp関数を呼び出し
       await signUp(email, password, username);
       
+      // 成功時の処理
       setSuccess(true);
-      // ユーザー作成成功後にログインページまたはホームに遷移
-      // 通常はメール確認が必要なため、確認メッセージを表示
       
     } catch (error: any) {
-      console.error('登録エラー:', error);
-      if (error.message?.includes('already registered')) {
-        setError('このメールアドレスは既に登録されています');
+      console.error('登録エラー詳細:', error);
+      
+      // エラーメッセージの詳細な処理
+      if (error.message) {
+        if (error.message.includes('already registered')) {
+          setError('このメールアドレスは既に登録されています');
+        } else {
+          setError(`登録に失敗しました: ${error.message}`);
+        }
       } else {
         setError('登録に失敗しました。もう一度お試しください。');
       }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSupabase } from '@/app/providers/supabase-provider';
@@ -9,12 +9,20 @@ export default function SignInPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/';
-  const { signIn } = useSupabase();
+  const { user, signIn, isLoading } = useSupabase();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // ユーザーが既にログインしている場合はリダイレクト
+  useEffect(() => {
+    if (user && !isLoading) {
+      console.log('User already signed in, redirecting to:', redirect);
+      router.push(redirect);
+    }
+  }, [user, isLoading, router, redirect]);
   
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,19 +33,36 @@ export default function SignInPage() {
     }
     
     try {
-      setIsLoading(true);
+      setIsSubmitting(true);
       setError(null);
       
+      console.log('Attempting to sign in with:', email);
       await signIn(email, password);
+      
+      console.log('Sign in successful, redirecting to:', redirect);
       router.push(redirect);
       
     } catch (error: any) {
-      console.error('ログインエラー:', error);
+      console.error('Login error:', error);
       setError('ログインに失敗しました。メールアドレスとパスワードを確認してください。');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
+  
+  // ロード中は何も表示しない
+  if (isLoading) {
+    return (
+      <div className="max-w-md mx-auto text-center py-12">
+        <p>読み込み中...</p>
+      </div>
+    );
+  }
+  
+  // ユーザーが既にログインしている場合は何も表示しない（useEffectでリダイレクト）
+  if (user) {
+    return null;
+  }
   
   return (
     <div className="max-w-md mx-auto">
@@ -109,10 +134,10 @@ export default function SignInPage() {
         <div>
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isSubmitting}
             className="w-full btn-primary"
           >
-            {isLoading ? 'ログイン中...' : 'ログイン'}
+            {isSubmitting ? 'ログイン中...' : 'ログイン'}
           </button>
         </div>
       </form>

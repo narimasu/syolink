@@ -59,6 +59,8 @@ export default function UploadPage() {
   // カテゴリーと現在のお題を取得
   useEffect(() => {
     const fetchData = async () => {
+      console.log('Fetching categories and theme data');
+      
       // カテゴリー一覧を取得
       const { data: categoryData } = await supabase
         .from('categories')
@@ -66,6 +68,7 @@ export default function UploadPage() {
         .order('name');
       
       if (categoryData) {
+        console.log('Categories loaded:', categoryData.length);
         setCategories(categoryData);
         // 最初のカテゴリーをデフォルト選択
         if (categoryData.length > 0) {
@@ -86,6 +89,7 @@ export default function UploadPage() {
         .single();
       
       if (themeData) {
+        console.log('Current theme loaded:', themeData.title);
         setCurrentTheme(themeData);
         
         // URLパラメータにthemeIdがある場合はフォームにセット
@@ -106,25 +110,35 @@ export default function UploadPage() {
           .gte('created_at', today.toISOString());
         
         if (count !== null) {
+          console.log('Daily uploads:', count);
           setDailyUploads(count);
         }
       }
     };
     
-    fetchData();
-  }, [user, setValue, themeId]);
+    if (!isLoading) {
+      fetchData();
+    }
+  }, [user, isLoading, setValue, themeId]);
   
   // 認証チェック
   useEffect(() => {
     if (!isLoading && !user) {
+      console.log('User not authenticated, redirecting to login');
       router.push('/auth/signin?redirect=/artworks/upload');
+    } else if (user) {
+      console.log('User authenticated:', user.email);
     }
   }, [user, isLoading, router]);
   
   const onSubmit = async (data: UploadFormData) => {
-    if (!user || !uploadedFile) return;
+    if (!user || !uploadedFile) {
+      console.error('User or file not available');
+      return;
+    }
     
     try {
+      console.log('Starting upload process');
       setIsSubmitting(true);
       setUploadProgress(10); // アップロード開始を示す
       
@@ -133,6 +147,7 @@ export default function UploadPage() {
       const fileName = `${crypto.randomUUID()}.${fileExt}`;
       const filePath = `uploads/${user.id}/${fileName}`;
       
+      console.log('Uploading file to:', filePath);
       const { error: uploadError } = await supabase.storage
         .from('artworks')
         .upload(filePath, uploadedFile, {
@@ -140,7 +155,10 @@ export default function UploadPage() {
           contentType: uploadedFile.type
         });
       
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('File upload error:', uploadError);
+        throw uploadError;
+      }
       
       setUploadProgress(70); // アップロード完了を示す
       
@@ -149,9 +167,11 @@ export default function UploadPage() {
         .from('artworks')
         .getPublicUrl(filePath);
       
+      console.log('Public URL generated:', publicUrl.publicUrl);
       setUploadProgress(80); // URL取得完了を示す
       
       // データベースに作品情報を保存
+      console.log('Saving artwork data to database');
       const { error: insertError } = await supabase
         .from('artworks')
         .insert({
@@ -163,9 +183,13 @@ export default function UploadPage() {
           theme_id: data.themeId,
         });
       
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error('Database insert error:', insertError);
+        throw insertError;
+      }
       
       setUploadProgress(100); // 完了を示す
+      console.log('Upload complete, redirecting to home');
       
       // 成功したらホームに戻る
       router.push('/');
@@ -185,6 +209,11 @@ export default function UploadPage() {
         <p>読み込み中...</p>
       </div>
     );
+  }
+  
+  // 未認証の場合は何も表示しない (useEffectでリダイレクト)
+  if (!user) {
+    return null;
   }
   
   // 投稿制限チェック
