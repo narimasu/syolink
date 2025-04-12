@@ -4,8 +4,12 @@ import { createBrowserClient } from '@supabase/ssr';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
-// クライアントサイド用のSupabaseクライアント（従来の方法）
-// 注意: Next.js 15以降ではこの方法は非推奨です
+// 環境変数のログ出力（デバッグ用）
+console.log('Supabase URL exists:', !!supabaseUrl);
+console.log('Supabase Anon Key exists:', !!supabaseAnonKey);
+
+// クライアントサイド用のSupabaseクライアント
+console.log('Creating Supabase client with URL:', supabaseUrl);
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
@@ -14,7 +18,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// ブラウザで使用するSSR対応Supabaseクライアント（新しい推奨方法）
+// 初期化後のチェック
+supabase.storage.listBuckets().then(({data, error}) => {
+  if (error) {
+    console.error('Error checking buckets after initialization:', error);
+  } else {
+    console.log('Buckets available after initialization:', data?.map(b => b.name) || []);
+  }
+});
+
+// クライアントサイド用のSSR対応Supabaseクライアント
 export const createClientSupabaseClient = () => {
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

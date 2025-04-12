@@ -28,8 +28,9 @@ export default function UploadPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [currentTheme, setCurrentTheme] = useState<Theme | null>(null);
   const [dailyUploads, setDailyUploads] = useState(0);
+  const [isThemeSelected, setIsThemeSelected] = useState(!!themeId);
   
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<UploadFormData>({
+  const { register, handleSubmit, setValue, getValues, formState: { errors } } = useForm<UploadFormData>({
     defaultValues: {
       title: '',
       description: '',
@@ -67,13 +68,11 @@ export default function UploadPage() {
         .select('*')
         .order('name');
       
-      if (categoryData) {
+      if (categoryData && categoryData.length > 0) {
         console.log('Categories loaded:', categoryData.length);
         setCategories(categoryData);
         // 最初のカテゴリーをデフォルト選択
-        if (categoryData.length > 0) {
-          setValue('categoryId', categoryData[0].id);
-        }
+        setValue('categoryId', categoryData[0].id);
       }
       
       // 現在の月間お題を取得
@@ -81,12 +80,18 @@ export default function UploadPage() {
       const currentMonth = currentDate.getMonth() + 1;
       const currentYear = currentDate.getFullYear();
       
-      const { data: themeData } = await supabase
+      console.log(`Fetching theme for ${currentYear}/${currentMonth}`);
+      
+      const { data: themeData, error } = await supabase
         .from('themes')
         .select('*')
         .eq('month', currentMonth)
         .eq('year', currentYear)
-        .single();
+        .maybeSingle();
+      
+      if (error) {
+        console.error('Error fetching theme:', error);
+      }
       
       if (themeData) {
         console.log('Current theme loaded:', themeData.title);
@@ -94,8 +99,12 @@ export default function UploadPage() {
         
         // URLパラメータにthemeIdがある場合はフォームにセット
         if (themeId) {
+          console.log('Setting theme ID from URL parameter:', themeId);
           setValue('themeId', themeId);
+          setIsThemeSelected(true);
         }
+      } else {
+        console.log('No current theme found for this month');
       }
       
       // 今日の投稿数を取得
@@ -103,11 +112,15 @@ export default function UploadPage() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
-        const { count } = await supabase
+        const { count, error: countError } = await supabase
           .from('artworks')
           .select('*', { count: 'exact' })
           .eq('user_id', user.id)
           .gte('created_at', today.toISOString());
+        
+        if (countError) {
+          console.error('Error fetching daily uploads count:', countError);
+        }
         
         if (count !== null) {
           console.log('Daily uploads:', count);
@@ -131,6 +144,48 @@ export default function UploadPage() {
     }
   }, [user, isLoading, router]);
   
+  const toggleTheme = () => {
+    const newValue = !isThemeSelected;
+    setIsThemeSelected(newValue);
+    setValue('themeId', newValue && currentTheme ? currentTheme.id : null);
+    console.log('Theme toggled to:', newValue, 'Theme ID:', newValue && currentTheme ? currentTheme.id : null);
+  };
+  
+  // シンプルな画像アップロード関数
+  const simpleUpload = async (file: File): Promise<string> => {
+    try {
+      const response = await supabase.storage
+        .from('artworks')
+        .upload(`upload-${Date.now()}.jpg`, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+      
+      if (response.error) {
+        const errorMessage = response.error.message || 'アップロードエラーが発生しました';
+        alert(errorMessage);
+        throw response.error;
+      }
+      
+      if (!response.data || !response.data.path) {
+        const errorMessage = 'アップロードは成功しましたが、ファイルパスが返されませんでした';
+        alert(errorMessage);
+        throw new Error(errorMessage);
+      }
+      
+      // 公開URLを取得
+      const urlData = supabase.storage
+        .from('artworks')
+        .getPublicUrl(response.data.path);
+      
+      console.log('Public URL:', urlData.data.publicUrl);
+      return urlData.data.publicUrl;
+    } catch (err) {
+      console.error('Error in simpleUpload:', err);
+      throw err;
+    }
+  };
+  
   const onSubmit = async (data: UploadFormData) => {
     if (!user || !uploadedFile) {
       console.error('User or file not available');
@@ -138,65 +193,72 @@ export default function UploadPage() {
     }
     
     try {
-      console.log('Starting upload process');
+      console.log('Starting upload process with data:', data);
       setIsSubmitting(true);
       setUploadProgress(10); // アップロード開始を示す
       
-      // Storage にファイルをアップロード
-      const fileExt = uploadedFile.name.split('.').pop();
-      const fileName = `${crypto.randomUUID()}.${fileExt}`;
-      const filePath = `uploads/${user.id}/${fileName}`;
-      
-      console.log('Uploading file to:', filePath);
-      const { error: uploadError } = await supabase.storage
-        .from('artworks')
-        .upload(filePath, uploadedFile, {
-          upsert: false,
-          contentType: uploadedFile.type
-        });
-      
-      if (uploadError) {
-        console.error('File upload error:', uploadError);
-        throw uploadError;
+      // ファイルサイズのチェック
+      if (uploadedFile.size > 5 * 1024 * 1024) {
+        throw new Error('ファイルサイズが5MBを超えています');
       }
+      
+      console.log('Using simplified upload approach');
+      setUploadProgress(30);
+      
+      // シンプルなアップロード関数を使用
+      const publicUrl = await simpleUpload(uploadedFile);
       
       setUploadProgress(70); // アップロード完了を示す
       
-      // 画像の公開URLを取得
-      const { data: publicUrl } = supabase.storage
-        .from('artworks')
-        .getPublicUrl(filePath);
-      
-      console.log('Public URL generated:', publicUrl.publicUrl);
-      setUploadProgress(80); // URL取得完了を示す
-      
       // データベースに作品情報を保存
       console.log('Saving artwork data to database');
-      const { error: insertError } = await supabase
+      const { error: insertError, data: insertData } = await supabase
         .from('artworks')
         .insert({
           user_id: user.id,
           title: data.title,
           description: data.description,
-          image_url: publicUrl.publicUrl,
+          image_url: publicUrl,
           category_id: data.categoryId,
           theme_id: data.themeId,
-        });
+        })
+        .select()
+        .single();
       
       if (insertError) {
-        console.error('Database insert error:', insertError);
+        console.error('Database insert error details:', JSON.stringify(insertError));
         throw insertError;
       }
       
+      console.log('Database insert successful, data:', insertData);
       setUploadProgress(100); // 完了を示す
-      console.log('Upload complete, redirecting to home');
       
       // 成功したらホームに戻る
       router.push('/');
       
-    } catch (error) {
+    } catch (error: any) {
+      let errorMessage = 'アップロード中にエラーが発生しました';
+      
+      // エラータイプに応じたメッセージ
+      if (error && error.message) {
+        if (typeof error.message === 'string') {
+          if (error.message.includes('storage/bucket-not-found')) {
+            errorMessage = 'ストレージバケットが見つかりません';
+          } else if (error.message.includes('storage/unauthorized')) {
+            errorMessage = 'ファイルのアップロード権限がありません';
+          } else if (error.message.includes('row-level security policy')) {
+            errorMessage = 'セキュリティポリシーによりアップロードが拒否されました。管理者に連絡してください。';
+          } else {
+            errorMessage += `: ${error.message}`;
+          }
+        }
+      }
+      
       console.error('Error uploading artwork:', error);
-      alert('アップロード中にエラーが発生しました。');
+      if (error) {
+        console.error('Error details:', JSON.stringify(error, null, 2));
+      }
+      alert(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -328,12 +390,17 @@ export default function UploadPage() {
                     id="theme"
                     type="checkbox"
                     className="mt-1"
-                    checked={!!themeId}
-                    onChange={(e) => {
-                      setValue('themeId', e.target.checked ? currentTheme.id : null);
-                    }}
+                    checked={isThemeSelected}
+                    onChange={() => toggleTheme()}
                   />
-                  <label htmlFor="theme" className="ml-2 block text-sm text-gray-700">
+                  <label 
+                    htmlFor="theme" 
+                    className="ml-2 block text-sm text-gray-700 cursor-pointer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      toggleTheme();
+                    }}
+                  >
                     今月のお題「{currentTheme.title}」に投稿する
                   </label>
                 </div>
