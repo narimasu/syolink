@@ -29,8 +29,9 @@ export default function UploadPage() {
   const [currentTheme, setCurrentTheme] = useState<Theme | null>(null);
   const [dailyUploads, setDailyUploads] = useState(0);
   const [isThemeSelected, setIsThemeSelected] = useState(!!themeId);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   
-  const { register, handleSubmit, setValue, getValues, formState: { errors } } = useForm<UploadFormData>({
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<UploadFormData>({
     defaultValues: {
       title: '',
       description: '',
@@ -151,38 +152,46 @@ export default function UploadPage() {
     console.log('Theme toggled to:', newValue, 'Theme ID:', newValue && currentTheme ? currentTheme.id : null);
   };
   
-  // シンプルな画像アップロード関数
-  const simpleUpload = async (file: File): Promise<string> => {
+  // 改善されたファイルアップロード関数
+  const uploadFile = async (file: File): Promise<string> => {
     try {
-      const response = await supabase.storage
+      setUploadError(null);
+      
+      // ファイル名を生成（ユーザーIDとタイムスタンプを含む一意のもの）
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user!.id}_${Date.now()}.${fileExt}`;
+      const filePath = fileName;
+      
+      console.log(`Uploading file: ${filePath}`);
+      setUploadProgress(20);
+      
+      // ストレージにアップロード
+      const { data, error } = await supabase.storage
         .from('artworks')
-        .upload(`upload-${Date.now()}.jpg`, file, {
+        .upload(filePath, file, {
           cacheControl: '3600',
-          upsert: true
+          upsert: false
         });
       
-      if (response.error) {
-        const errorMessage = response.error.message || 'アップロードエラーが発生しました';
-        alert(errorMessage);
-        throw response.error;
+      if (error) {
+        console.error('Upload error:', error);
+        throw error;
       }
       
-      if (!response.data || !response.data.path) {
-        const errorMessage = 'アップロードは成功しましたが、ファイルパスが返されませんでした';
-        alert(errorMessage);
-        throw new Error(errorMessage);
-      }
+      setUploadProgress(70);
+      console.log('File uploaded successfully:', data?.path);
       
       // 公開URLを取得
-      const urlData = supabase.storage
+      const { data: urlData } = supabase.storage
         .from('artworks')
-        .getPublicUrl(response.data.path);
+        .getPublicUrl(filePath);
       
-      console.log('Public URL:', urlData.data.publicUrl);
-      return urlData.data.publicUrl;
-    } catch (err) {
-      console.error('Error in simpleUpload:', err);
-      throw err;
+      console.log('Public URL:', urlData.publicUrl);
+      return urlData.publicUrl;
+    } catch (error: any) {
+      console.error('File upload failed:', error);
+      setUploadError(error.message || 'ファイルのアップロードに失敗しました');
+      throw error;
     }
   };
   
@@ -202,13 +211,10 @@ export default function UploadPage() {
         throw new Error('ファイルサイズが5MBを超えています');
       }
       
-      console.log('Using simplified upload approach');
-      setUploadProgress(30);
+      // ファイルをアップロード
+      const imageUrl = await uploadFile(uploadedFile);
       
-      // シンプルなアップロード関数を使用
-      const publicUrl = await simpleUpload(uploadedFile);
-      
-      setUploadProgress(70); // アップロード完了を示す
+      setUploadProgress(80); // アップロード完了を示す
       
       // データベースに作品情報を保存
       console.log('Saving artwork data to database');
@@ -218,7 +224,7 @@ export default function UploadPage() {
           user_id: user.id,
           title: data.title,
           description: data.description,
-          image_url: publicUrl,
+          image_url: imageUrl,
           category_id: data.categoryId,
           theme_id: data.themeId,
         })
@@ -233,8 +239,8 @@ export default function UploadPage() {
       console.log('Database insert successful, data:', insertData);
       setUploadProgress(100); // 完了を示す
       
-      // 成功したらホームに戻る
-      router.push('/');
+      // 成功したら作品詳細ページにリダイレクト
+      router.push(`/artworks/${insertData.id}`);
       
     } catch (error: any) {
       let errorMessage = 'アップロード中にエラーが発生しました';
@@ -258,7 +264,7 @@ export default function UploadPage() {
       if (error) {
         console.error('Error details:', JSON.stringify(error, null, 2));
       }
-      alert(errorMessage);
+      setUploadError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -294,6 +300,12 @@ export default function UploadPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {uploadError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-red-700">
+              <p>{uploadError}</p>
+            </div>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* 画像アップロードエリア */}
             <div>

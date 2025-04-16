@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useSupabase } from '@/app/providers/supabase-provider';
 import { supabase } from '@/lib/supabase/client';
 import { User, ArtworkWithDetails } from '@/lib/supabase/schema';
-import ArtworkGrid from '../components/features/artwork-grid';
+import ArtworkGrid from '@/app/components/features/artwork-grid';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -107,14 +107,9 @@ export default function ProfilePage() {
             <h1 className="text-2xl font-bold mb-1">{profile?.username}</h1>
             <p className="text-gray-500 mb-4">{profile?.email}</p>
             
-            <div className="flex flex-wrap justify-center md:justify-start gap-2">
-              <Link href="/profile/edit" className="btn-secondary text-sm">
-                プロフィールを編集
-              </Link>
-              <Link href="/profile/settings" className="btn-secondary text-sm">
-                アカウント設定
-              </Link>
-            </div>
+            <Link href="/profile/edit" className="btn-secondary text-sm">
+              プロフィールを編集
+            </Link>
           </div>
         </div>
       </div>

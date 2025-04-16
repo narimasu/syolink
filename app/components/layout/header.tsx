@@ -1,17 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSupabase } from '@/app/providers/supabase-provider';
 import { useRouter } from 'next/navigation';
 
 export default function Header() {
   const { user, signOut, isLoading } = useSupabase();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const router = useRouter();
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
+  };
+
+  const toggleUserMenu = () => {
+    setIsUserMenuOpen(!isUserMenuOpen);
   };
 
   const handleSignOut = async () => {
@@ -29,6 +35,20 @@ export default function Header() {
     // デバッグ用: 認証状態のログ
     console.log('Header auth state:', { user, isLoading });
   }, [user, isLoading]);
+
+  // ユーザーメニュー外のクリックでメニューを閉じる
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
     <header className="bg-white shadow-sm">
@@ -54,24 +74,38 @@ export default function Header() {
                 <Link href="/artworks/upload" className="btn-primary">
                   投稿する
                 </Link>
-                <div className="relative group">
-                  <button className="flex items-center text-gray-600">
+                <div className="relative" ref={userMenuRef}>
+                  <button 
+                    className="flex items-center text-gray-600 hover:text-primary-500"
+                    onClick={toggleUserMenu}
+                    aria-expanded={isUserMenuOpen}
+                    aria-haspopup="true"
+                  >
                     <span className="mr-1">{user.user_metadata.username || 'ユーザー'}</span>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
                   </button>
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 hidden group-hover:block">
-                    <Link href="/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                      プロフィール
-                    </Link>
-                    <button
-                      onClick={handleSignOut}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      ログアウト
-                    </button>
-                  </div>
+                  {isUserMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+                      <Link 
+                        href="/profile" 
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        onClick={() => setIsUserMenuOpen(false)}
+                      >
+                        プロフィール
+                      </Link>
+                      <button
+                        onClick={() => {
+                          handleSignOut();
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        ログアウト
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (

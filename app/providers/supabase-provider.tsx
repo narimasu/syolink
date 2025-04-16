@@ -12,6 +12,7 @@ type SupabaseContextType = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, username: string) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>; // アカウント削除機能を追加
 };
 
 const SupabaseContext = createContext<SupabaseContextType>({
@@ -21,6 +22,7 @@ const SupabaseContext = createContext<SupabaseContextType>({
   signIn: async () => {},
   signUp: async () => {},
   signOut: async () => {},
+  deleteAccount: async () => {}, // アカウント削除機能を追加
 });
 
 export const useSupabase = () => useContext(SupabaseContext);
@@ -172,6 +174,79 @@ export const SupabaseProvider = ({ children }: { children: React.ReactNode }) =>
     }
   };
 
+  // アカウント削除機能を追加
+  const deleteAccount = async () => {
+    try {
+      console.log('Deleting account...');
+      if (!user) {
+        throw new Error('ユーザーがログインしていません');
+      }
+
+      // 1. ユーザーが投稿した作品を削除
+      const { error: artworksError } = await supabase
+        .from('artworks')
+        .delete()
+        .eq('user_id', user.id);
+        
+      if (artworksError) {
+        console.error('Error deleting user artworks:', artworksError);
+        throw artworksError;
+      }
+      
+      // 2. ユーザーが付けたいいねを削除
+      const { error: likesError } = await supabase
+        .from('likes')
+        .delete()
+        .eq('user_id', user.id);
+        
+      if (likesError) {
+        console.error('Error deleting user likes:', likesError);
+        throw likesError;
+      }
+      
+      // 3. ユーザーが投稿したコメントを削除
+      const { error: commentsError } = await supabase
+        .from('comments')
+        .delete()
+        .eq('user_id', user.id);
+        
+      if (commentsError) {
+        console.error('Error deleting user comments:', commentsError);
+        throw commentsError;
+      }
+      
+      // 4. ユーザープロフィールを削除
+      const { error: profileError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', user.id);
+        
+      if (profileError) {
+        console.error('Error deleting user profile:', profileError);
+        throw profileError;
+      }
+      
+      // 5. Supabase Authからユーザーを削除
+      const { error: authError } = await supabase.auth.admin.deleteUser(
+        user.id
+      );
+      
+      if (authError) {
+        console.error('Error deleting auth user:', authError);
+        throw authError;
+      }
+      
+      // 6. ログアウト処理
+      await signOut();
+      
+      console.log('Account deleted successfully');
+      router.push('/');
+    } catch (error) {
+      console.error('Delete account exception:', error);
+      throw error;
+    }
+  };
+
   const value = {
     user,
     isLoading,
@@ -179,6 +254,7 @@ export const SupabaseProvider = ({ children }: { children: React.ReactNode }) =>
     signIn,
     signUp,
     signOut,
+    deleteAccount, // アカウント削除機能を追加
   };
 
   return (

@@ -66,109 +66,319 @@ CREATE TABLE IF NOT EXISTS public.comments (
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 -- ユーザー自身のデータを読み書きできるポリシー
-CREATE POLICY "ユーザーは自分自身のデータを更新できる" ON public.users
-  FOR UPDATE USING (auth.uid() = id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'users' 
+        AND policyname = 'ユーザーは自分自身のデータを更新できる'
+    ) THEN
+        CREATE POLICY "ユーザーは自分自身のデータを更新できる" ON public.users
+        FOR UPDATE USING (auth.uid() = id);
+    END IF;
+END
+$$;
 
 -- すべてのユーザーが他のユーザーのプロフィールを閲覧できるポリシー
-CREATE POLICY "ユーザープロフィールは誰でも閲覧可能" ON public.users
-  FOR SELECT USING (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'users' 
+        AND policyname = 'ユーザープロフィールは誰でも閲覧可能'
+    ) THEN
+        CREATE POLICY "ユーザープロフィールは誰でも閲覧可能" ON public.users
+        FOR SELECT USING (true);
+    END IF;
+END
+$$;
 
 -- カテゴリーテーブルのRLS
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 
 -- カテゴリーは誰でも閲覧可能
-CREATE POLICY "カテゴリーは誰でも閲覧可能" ON public.categories
-  FOR SELECT USING (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'categories' 
+        AND policyname = 'カテゴリーは誰でも閲覧可能'
+    ) THEN
+        CREATE POLICY "カテゴリーは誰でも閲覧可能" ON public.categories
+        FOR SELECT USING (true);
+    END IF;
+END
+$$;
 
 -- カテゴリーは管理者のみが管理可能
-CREATE POLICY "カテゴリーは管理者のみが作成可能" ON public.categories
-  FOR INSERT WITH CHECK (EXISTS (
-    SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-  ));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'categories' 
+        AND policyname = 'カテゴリーは管理者のみが作成可能'
+    ) THEN
+        CREATE POLICY "カテゴリーは管理者のみが作成可能" ON public.categories
+        FOR INSERT WITH CHECK (EXISTS (
+            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
+        ));
+    END IF;
+END
+$$;
 
-CREATE POLICY "カテゴリーは管理者のみが更新可能" ON public.categories
-  FOR UPDATE USING (EXISTS (
-    SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-  ));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'categories' 
+        AND policyname = 'カテゴリーは管理者のみが更新可能'
+    ) THEN
+        CREATE POLICY "カテゴリーは管理者のみが更新可能" ON public.categories
+        FOR UPDATE USING (EXISTS (
+            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
+        ));
+    END IF;
+END
+$$;
 
-CREATE POLICY "カテゴリーは管理者のみが削除可能" ON public.categories
-  FOR DELETE USING (EXISTS (
-    SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-  ));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'categories' 
+        AND policyname = 'カテゴリーは管理者のみが削除可能'
+    ) THEN
+        CREATE POLICY "カテゴリーは管理者のみが削除可能" ON public.categories
+        FOR DELETE USING (EXISTS (
+            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
+        ));
+    END IF;
+END
+$$;
 
 -- 月間お題テーブルのRLS
 ALTER TABLE public.themes ENABLE ROW LEVEL SECURITY;
 
 -- お題は誰でも閲覧可能
-CREATE POLICY "お題は誰でも閲覧可能" ON public.themes
-  FOR SELECT USING (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'themes' 
+        AND policyname = 'お題は誰でも閲覧可能'
+    ) THEN
+        CREATE POLICY "お題は誰でも閲覧可能" ON public.themes
+        FOR SELECT USING (true);
+    END IF;
+END
+$$;
 
 -- お題は管理者のみが管理可能
-CREATE POLICY "お題は管理者のみが作成可能" ON public.themes
-  FOR INSERT WITH CHECK (EXISTS (
-    SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-  ));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'themes' 
+        AND policyname = 'お題は管理者のみが作成可能'
+    ) THEN
+        CREATE POLICY "お題は管理者のみが作成可能" ON public.themes
+        FOR INSERT WITH CHECK (EXISTS (
+            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
+        ));
+    END IF;
+END
+$$;
 
-CREATE POLICY "お題は管理者のみが更新可能" ON public.themes
-  FOR UPDATE USING (EXISTS (
-    SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-  ));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'themes' 
+        AND policyname = 'お題は管理者のみが更新可能'
+    ) THEN
+        CREATE POLICY "お題は管理者のみが更新可能" ON public.themes
+        FOR UPDATE USING (EXISTS (
+            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
+        ));
+    END IF;
+END
+$$;
 
-CREATE POLICY "お題は管理者のみが削除可能" ON public.themes
-  FOR DELETE USING (EXISTS (
-    SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-  ));
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'themes' 
+        AND policyname = 'お題は管理者のみが削除可能'
+    ) THEN
+        CREATE POLICY "お題は管理者のみが削除可能" ON public.themes
+        FOR DELETE USING (EXISTS (
+            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
+        ));
+    END IF;
+END
+$$;
 
 -- 作品テーブルのRLS
 ALTER TABLE public.artworks ENABLE ROW LEVEL SECURITY;
 
 -- 作品は誰でも閲覧可能
-CREATE POLICY "作品は誰でも閲覧可能" ON public.artworks
-  FOR SELECT USING (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'artworks' 
+        AND policyname = '作品は誰でも閲覧可能'
+    ) THEN
+        CREATE POLICY "作品は誰でも閲覧可能" ON public.artworks
+        FOR SELECT USING (true);
+    END IF;
+END
+$$;
 
 -- 作品は認証済みユーザーのみが投稿可能
-CREATE POLICY "作品は認証済みユーザーのみが投稿可能" ON public.artworks
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'artworks' 
+        AND policyname = '作品は認証済みユーザーのみが投稿可能'
+    ) THEN
+        CREATE POLICY "作品は認証済みユーザーのみが投稿可能" ON public.artworks
+        FOR INSERT WITH CHECK (auth.uid() = user_id);
+    END IF;
+END
+$$;
 
 -- 作品は作成者のみが更新・削除可能
-CREATE POLICY "作品は作成者のみが更新可能" ON public.artworks
-  FOR UPDATE USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'artworks' 
+        AND policyname = '作品は作成者のみが更新可能'
+    ) THEN
+        CREATE POLICY "作品は作成者のみが更新可能" ON public.artworks
+        FOR UPDATE USING (auth.uid() = user_id);
+    END IF;
+END
+$$;
 
-CREATE POLICY "作品は作成者のみが削除可能" ON public.artworks
-  FOR DELETE USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'artworks' 
+        AND policyname = '作品は作成者のみが削除可能'
+    ) THEN
+        CREATE POLICY "作品は作成者のみが削除可能" ON public.artworks
+        FOR DELETE USING (auth.uid() = user_id);
+    END IF;
+END
+$$;
 
 -- いいねテーブルのRLS
 ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
 
 -- いいねは誰でも閲覧可能
-CREATE POLICY "いいねは誰でも閲覧可能" ON public.likes
-  FOR SELECT USING (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'likes' 
+        AND policyname = 'いいねは誰でも閲覧可能'
+    ) THEN
+        CREATE POLICY "いいねは誰でも閲覧可能" ON public.likes
+        FOR SELECT USING (true);
+    END IF;
+END
+$$;
 
 -- いいねは認証済みユーザーのみが追加可能
-CREATE POLICY "いいねは認証済みユーザーのみが追加可能" ON public.likes
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'likes' 
+        AND policyname = 'いいねは認証済みユーザーのみが追加可能'
+    ) THEN
+        CREATE POLICY "いいねは認証済みユーザーのみが追加可能" ON public.likes
+        FOR INSERT WITH CHECK (auth.uid() = user_id);
+    END IF;
+END
+$$;
 
 -- いいねは作成者のみが削除可能
-CREATE POLICY "いいねは作成者のみが削除可能" ON public.likes
-  FOR DELETE USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'likes' 
+        AND policyname = 'いいねは作成者のみが削除可能'
+    ) THEN
+        CREATE POLICY "いいねは作成者のみが削除可能" ON public.likes
+        FOR DELETE USING (auth.uid() = user_id);
+    END IF;
+END
+$$;
 
 -- コメントテーブルのRLS
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 
 -- コメントは誰でも閲覧可能
-CREATE POLICY "コメントは誰でも閲覧可能" ON public.comments
-  FOR SELECT USING (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'comments' 
+        AND policyname = 'コメントは誰でも閲覧可能'
+    ) THEN
+        CREATE POLICY "コメントは誰でも閲覧可能" ON public.comments
+        FOR SELECT USING (true);
+    END IF;
+END
+$$;
 
 -- コメントは認証済みユーザーのみが投稿可能
-CREATE POLICY "コメントは認証済みユーザーのみが投稿可能" ON public.comments
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'comments' 
+        AND policyname = 'コメントは認証済みユーザーのみが投稿可能'
+    ) THEN
+        CREATE POLICY "コメントは認証済みユーザーのみが投稿可能" ON public.comments
+        FOR INSERT WITH CHECK (auth.uid() = user_id);
+    END IF;
+END
+$$;
 
 -- コメントは作成者のみが更新・削除可能
-CREATE POLICY "コメントは作成者のみが更新可能" ON public.comments
-  FOR UPDATE USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'comments' 
+        AND policyname = 'コメントは作成者のみが更新可能'
+    ) THEN
+        CREATE POLICY "コメントは作成者のみが更新可能" ON public.comments
+        FOR UPDATE USING (auth.uid() = user_id);
+    END IF;
+END
+$$;
 
-CREATE POLICY "コメントは作成者のみが削除可能" ON public.comments
-  FOR DELETE USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT FROM pg_policies 
+        WHERE tablename = 'comments' 
+        AND policyname = 'コメントは作成者のみが削除可能'
+    ) THEN
+        CREATE POLICY "コメントは作成者のみが削除可能" ON public.comments
+        FOR DELETE USING (auth.uid() = user_id);
+    END IF;
+END
+$$;
 
 -- トリガー: ユーザーが新規登録されたら自動的にpublic.usersに登録
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -180,9 +390,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- トリガーが存在しない場合のみ作成
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger 
+    WHERE tgname = 'on_auth_user_created'
+  ) THEN
+    CREATE TRIGGER on_auth_user_created
+      AFTER INSERT ON auth.users
+      FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+  END IF;
+END
+$$;
 
 -- 初期データ: カテゴリー
 INSERT INTO public.categories (name, description)
