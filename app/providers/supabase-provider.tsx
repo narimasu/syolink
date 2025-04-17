@@ -12,7 +12,7 @@ type SupabaseContextType = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, username: string) => Promise<void>;
   signOut: () => Promise<void>;
-  deleteAccount: () => Promise<void>; // アカウント削除機能を追加
+  deleteAccount: () => Promise<void>;
 };
 
 const SupabaseContext = createContext<SupabaseContextType>({
@@ -22,7 +22,7 @@ const SupabaseContext = createContext<SupabaseContextType>({
   signIn: async () => {},
   signUp: async () => {},
   signOut: async () => {},
-  deleteAccount: async () => {}, // アカウント削除機能を追加
+  deleteAccount: async () => {},
 });
 
 export const useSupabase = () => useContext(SupabaseContext);
@@ -115,7 +115,9 @@ export const SupabaseProvider = ({ children }: { children: React.ReactNode }) =>
   const signUp = async (email: string, password: string, username: string) => {
     try {
       console.log('Signing up with email:', email);
-      const { error, data } = await supabase.auth.signUp({
+      
+      // ステップ1: ユーザー認証の作成
+      const { error: authError, data } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -125,34 +127,47 @@ export const SupabaseProvider = ({ children }: { children: React.ReactNode }) =>
         },
       });
 
-      if (error) {
-        console.error('Sign up error:', error.message);
-        throw error;
+      if (authError) {
+        console.error('Sign up auth error:', authError);
+        throw authError;
       }
 
-      console.log('Sign up successful, user created:', data.user?.id);
+      console.log('Sign up auth successful, user created:', data.user?.id);
 
-      // ユーザープロファイルをデータベースに追加
+      // ステップ2: ユーザープロファイルをデータベースに追加
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('users')
-          .insert({
-            id: data.user.id,
-            email: data.user.email!,
-            username,
-          });
+        try {
+          const { error: profileError } = await supabase
+            .from('users')
+            .insert({
+              id: data.user.id,
+              email: data.user.email!,
+              username,
+            });
 
-        if (profileError) {
-          console.error('Error creating user profile:', profileError);
-          throw profileError;
+          if (profileError) {
+            // より詳細なエラーログ
+            console.error('Error creating user profile:', profileError);
+            console.error('Error details:', JSON.stringify(profileError));
+            throw profileError;
+          }
+          
+          console.log('User profile created successfully');
+        } catch (profileError) {
+          console.error('Profile creation exception:', profileError);
+          // エラーを表示するが、認証自体は成功しているのでスローはしない
+          console.error('Error creating user profile, but auth was successful');
         }
-        
-        console.log('User profile created successfully');
       }
       
       router.refresh();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sign up exception:', error);
+      // エラーの詳細情報をログに出力
+      if (error.details) console.error('Error details:', error.details);
+      if (error.hint) console.error('Error hint:', error.hint);
+      if (error.code) console.error('Error code:', error.code);
+      console.error('登録エラー詳細:', JSON.stringify(error, null, 2));
       throw error;
     }
   };
@@ -254,7 +269,7 @@ export const SupabaseProvider = ({ children }: { children: React.ReactNode }) =>
     signIn,
     signUp,
     signOut,
-    deleteAccount, // アカウント削除機能を追加
+    deleteAccount,
   };
 
   return (

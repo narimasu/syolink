@@ -1,9 +1,9 @@
 -- Supabaseセットアップスクリプト
--- このSQLをSupabaseのSQL Editorで実行することでデータベースの初期設定を行います
+-- まずテーブル構造を設定
 
--- ユーザーテーブル拡張
+-- ユーザープロフィールテーブル
 CREATE TABLE IF NOT EXISTS public.users (
-  id UUID REFERENCES auth.users NOT NULL PRIMARY KEY,
+  id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   username TEXT NOT NULL,
   avatar_url TEXT,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 -- カテゴリーテーブル
 CREATE TABLE IF NOT EXISTS public.categories (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
   description TEXT
 );
 
@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS public.themes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   title TEXT NOT NULL,
   description TEXT NOT NULL,
-  month INTEGER NOT NULL,
-  year INTEGER NOT NULL,
+  month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+  year INTEGER NOT NULL CHECK (year >= 2020),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
   UNIQUE(month, year)
 );
@@ -32,379 +32,193 @@ CREATE TABLE IF NOT EXISTS public.themes (
 -- 作品テーブル
 CREATE TABLE IF NOT EXISTS public.artworks (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES public.users(id) NOT NULL,
+  user_id UUID NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
   image_url TEXT NOT NULL,
-  category_id UUID REFERENCES public.categories(id) NOT NULL,
-  theme_id UUID REFERENCES public.themes(id),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+  category_id UUID NOT NULL,
+  theme_id UUID,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE,
+  FOREIGN KEY (category_id) REFERENCES public.categories(id) ON DELETE RESTRICT,
+  FOREIGN KEY (theme_id) REFERENCES public.themes(id) ON DELETE SET NULL
 );
 
 -- いいねテーブル
 CREATE TABLE IF NOT EXISTS public.likes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES public.users(id) NOT NULL,
-  artwork_id UUID REFERENCES public.artworks(id) NOT NULL,
+  user_id UUID NOT NULL,
+  artwork_id UUID NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE,
+  FOREIGN KEY (artwork_id) REFERENCES public.artworks(id) ON DELETE CASCADE,
   UNIQUE(user_id, artwork_id)
 );
 
 -- コメントテーブル
 CREATE TABLE IF NOT EXISTS public.comments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES public.users(id) NOT NULL,
-  artwork_id UUID REFERENCES public.artworks(id) NOT NULL,
+  user_id UUID NOT NULL,
+  artwork_id UUID NOT NULL,
   content TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE,
+  FOREIGN KEY (artwork_id) REFERENCES public.artworks(id) ON DELETE CASCADE
 );
 
--- RLS (Row Level Security) ポリシーの設定
--- すべてのテーブルにセキュリティポリシーを適用
-
--- ユーザーテーブルのRLS
+-- テーブル権限の設定
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-
--- ユーザー自身のデータを読み書きできるポリシー
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'users' 
-        AND policyname = 'ユーザーは自分自身のデータを更新できる'
-    ) THEN
-        CREATE POLICY "ユーザーは自分自身のデータを更新できる" ON public.users
-        FOR UPDATE USING (auth.uid() = id);
-    END IF;
-END
-$$;
-
--- すべてのユーザーが他のユーザーのプロフィールを閲覧できるポリシー
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'users' 
-        AND policyname = 'ユーザープロフィールは誰でも閲覧可能'
-    ) THEN
-        CREATE POLICY "ユーザープロフィールは誰でも閲覧可能" ON public.users
-        FOR SELECT USING (true);
-    END IF;
-END
-$$;
-
--- カテゴリーテーブルのRLS
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
-
--- カテゴリーは誰でも閲覧可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'categories' 
-        AND policyname = 'カテゴリーは誰でも閲覧可能'
-    ) THEN
-        CREATE POLICY "カテゴリーは誰でも閲覧可能" ON public.categories
-        FOR SELECT USING (true);
-    END IF;
-END
-$$;
-
--- カテゴリーは管理者のみが管理可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'categories' 
-        AND policyname = 'カテゴリーは管理者のみが作成可能'
-    ) THEN
-        CREATE POLICY "カテゴリーは管理者のみが作成可能" ON public.categories
-        FOR INSERT WITH CHECK (EXISTS (
-            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-        ));
-    END IF;
-END
-$$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'categories' 
-        AND policyname = 'カテゴリーは管理者のみが更新可能'
-    ) THEN
-        CREATE POLICY "カテゴリーは管理者のみが更新可能" ON public.categories
-        FOR UPDATE USING (EXISTS (
-            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-        ));
-    END IF;
-END
-$$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'categories' 
-        AND policyname = 'カテゴリーは管理者のみが削除可能'
-    ) THEN
-        CREATE POLICY "カテゴリーは管理者のみが削除可能" ON public.categories
-        FOR DELETE USING (EXISTS (
-            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-        ));
-    END IF;
-END
-$$;
-
--- 月間お題テーブルのRLS
 ALTER TABLE public.themes ENABLE ROW LEVEL SECURITY;
-
--- お題は誰でも閲覧可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'themes' 
-        AND policyname = 'お題は誰でも閲覧可能'
-    ) THEN
-        CREATE POLICY "お題は誰でも閲覧可能" ON public.themes
-        FOR SELECT USING (true);
-    END IF;
-END
-$$;
-
--- お題は管理者のみが管理可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'themes' 
-        AND policyname = 'お題は管理者のみが作成可能'
-    ) THEN
-        CREATE POLICY "お題は管理者のみが作成可能" ON public.themes
-        FOR INSERT WITH CHECK (EXISTS (
-            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-        ));
-    END IF;
-END
-$$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'themes' 
-        AND policyname = 'お題は管理者のみが更新可能'
-    ) THEN
-        CREATE POLICY "お題は管理者のみが更新可能" ON public.themes
-        FOR UPDATE USING (EXISTS (
-            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-        ));
-    END IF;
-END
-$$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'themes' 
-        AND policyname = 'お題は管理者のみが削除可能'
-    ) THEN
-        CREATE POLICY "お題は管理者のみが削除可能" ON public.themes
-        FOR DELETE USING (EXISTS (
-            SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin'
-        ));
-    END IF;
-END
-$$;
-
--- 作品テーブルのRLS
 ALTER TABLE public.artworks ENABLE ROW LEVEL SECURITY;
-
--- 作品は誰でも閲覧可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'artworks' 
-        AND policyname = '作品は誰でも閲覧可能'
-    ) THEN
-        CREATE POLICY "作品は誰でも閲覧可能" ON public.artworks
-        FOR SELECT USING (true);
-    END IF;
-END
-$$;
-
--- 作品は認証済みユーザーのみが投稿可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'artworks' 
-        AND policyname = '作品は認証済みユーザーのみが投稿可能'
-    ) THEN
-        CREATE POLICY "作品は認証済みユーザーのみが投稿可能" ON public.artworks
-        FOR INSERT WITH CHECK (auth.uid() = user_id);
-    END IF;
-END
-$$;
-
--- 作品は作成者のみが更新・削除可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'artworks' 
-        AND policyname = '作品は作成者のみが更新可能'
-    ) THEN
-        CREATE POLICY "作品は作成者のみが更新可能" ON public.artworks
-        FOR UPDATE USING (auth.uid() = user_id);
-    END IF;
-END
-$$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'artworks' 
-        AND policyname = '作品は作成者のみが削除可能'
-    ) THEN
-        CREATE POLICY "作品は作成者のみが削除可能" ON public.artworks
-        FOR DELETE USING (auth.uid() = user_id);
-    END IF;
-END
-$$;
-
--- いいねテーブルのRLS
 ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
-
--- いいねは誰でも閲覧可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'likes' 
-        AND policyname = 'いいねは誰でも閲覧可能'
-    ) THEN
-        CREATE POLICY "いいねは誰でも閲覧可能" ON public.likes
-        FOR SELECT USING (true);
-    END IF;
-END
-$$;
-
--- いいねは認証済みユーザーのみが追加可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'likes' 
-        AND policyname = 'いいねは認証済みユーザーのみが追加可能'
-    ) THEN
-        CREATE POLICY "いいねは認証済みユーザーのみが追加可能" ON public.likes
-        FOR INSERT WITH CHECK (auth.uid() = user_id);
-    END IF;
-END
-$$;
-
--- いいねは作成者のみが削除可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'likes' 
-        AND policyname = 'いいねは作成者のみが削除可能'
-    ) THEN
-        CREATE POLICY "いいねは作成者のみが削除可能" ON public.likes
-        FOR DELETE USING (auth.uid() = user_id);
-    END IF;
-END
-$$;
-
--- コメントテーブルのRLS
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 
--- コメントは誰でも閲覧可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'comments' 
-        AND policyname = 'コメントは誰でも閲覧可能'
-    ) THEN
-        CREATE POLICY "コメントは誰でも閲覧可能" ON public.comments
-        FOR SELECT USING (true);
-    END IF;
-END
-$$;
+-- RLS (Row Level Security) ポリシー
 
--- コメントは認証済みユーザーのみが投稿可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'comments' 
-        AND policyname = 'コメントは認証済みユーザーのみが投稿可能'
-    ) THEN
-        CREATE POLICY "コメントは認証済みユーザーのみが投稿可能" ON public.comments
-        FOR INSERT WITH CHECK (auth.uid() = user_id);
-    END IF;
-END
-$$;
+-- ユーザーテーブルのポリシー
+CREATE POLICY "ユーザーは自身のプロフィールを更新可能" 
+ON public.users FOR UPDATE 
+USING (auth.uid() = id);
 
--- コメントは作成者のみが更新・削除可能
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'comments' 
-        AND policyname = 'コメントは作成者のみが更新可能'
-    ) THEN
-        CREATE POLICY "コメントは作成者のみが更新可能" ON public.comments
-        FOR UPDATE USING (auth.uid() = user_id);
-    END IF;
-END
-$$;
+CREATE POLICY "ユーザープロフィールは誰でも閲覧可能" 
+ON public.users FOR SELECT 
+USING (true);
 
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT FROM pg_policies 
-        WHERE tablename = 'comments' 
-        AND policyname = 'コメントは作成者のみが削除可能'
-    ) THEN
-        CREATE POLICY "コメントは作成者のみが削除可能" ON public.comments
-        FOR DELETE USING (auth.uid() = user_id);
-    END IF;
-END
-$$;
+-- カテゴリーテーブルのポリシー
+CREATE POLICY "カテゴリーは誰でも閲覧可能" 
+ON public.categories FOR SELECT 
+USING (true);
 
--- トリガー: ユーザーが新規登録されたら自動的にpublic.usersに登録
+CREATE POLICY "カテゴリーは管理者のみ作成可能" 
+ON public.categories FOR INSERT 
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+CREATE POLICY "カテゴリーは管理者のみ更新可能" 
+ON public.categories FOR UPDATE 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+CREATE POLICY "カテゴリーは管理者のみ削除可能" 
+ON public.categories FOR DELETE 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+-- 月間お題テーブルのポリシー
+CREATE POLICY "お題は誰でも閲覧可能" 
+ON public.themes FOR SELECT 
+USING (true);
+
+CREATE POLICY "お題は管理者のみ作成可能" 
+ON public.themes FOR INSERT 
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+CREATE POLICY "お題は管理者のみ更新可能" 
+ON public.themes FOR UPDATE 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+CREATE POLICY "お題は管理者のみ削除可能" 
+ON public.themes FOR DELETE 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+-- 作品テーブルのポリシー
+CREATE POLICY "作品は誰でも閲覧可能" 
+ON public.artworks FOR SELECT 
+USING (true);
+
+CREATE POLICY "作品は認証済みユーザーのみ投稿可能" 
+ON public.artworks FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "作品は作成者のみ更新可能" 
+ON public.artworks FOR UPDATE 
+USING (auth.uid() = user_id);
+
+CREATE POLICY "作品は作成者のみ削除可能" 
+ON public.artworks FOR DELETE 
+USING (auth.uid() = user_id);
+
+-- いいねテーブルのポリシー
+CREATE POLICY "いいねは誰でも閲覧可能" 
+ON public.likes FOR SELECT 
+USING (true);
+
+CREATE POLICY "いいねは認証済みユーザーのみ追加可能" 
+ON public.likes FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "いいねは作成者のみ削除可能" 
+ON public.likes FOR DELETE 
+USING (auth.uid() = user_id);
+
+-- コメントテーブルのポリシー
+CREATE POLICY "コメントは誰でも閲覧可能" 
+ON public.comments FOR SELECT 
+USING (true);
+
+CREATE POLICY "コメントは認証済みユーザーのみ投稿可能" 
+ON public.comments FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "コメントは作成者のみ更新可能" 
+ON public.comments FOR UPDATE 
+USING (auth.uid() = user_id);
+
+CREATE POLICY "コメントは作成者のみ削除可能" 
+ON public.comments FOR DELETE 
+USING (auth.uid() = user_id);
+
+-- ユーザー登録時の自動処理用関数
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.users (id, email, username, avatar_url)
-  VALUES (new.id, new.email, coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)), new.raw_user_meta_data->>'avatar_url');
+  VALUES (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
+    new.raw_user_meta_data->>'avatar_url'
+  );
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- トリガーが存在しない場合のみ作成
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_trigger 
-    WHERE tgname = 'on_auth_user_created'
-  ) THEN
-    CREATE TRIGGER on_auth_user_created
-      AFTER INSERT ON auth.users
-      FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-  END IF;
-END
-$$;
+-- 既存のトリガーを削除してから作成（冪等性を保つため）
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 初期データ: カテゴリー
+-- 初期データの挿入
+-- カテゴリー
 INSERT INTO public.categories (name, description)
 VALUES
   ('楷書', '整った形の書体で、初心者にも書きやすい'),
@@ -416,23 +230,71 @@ VALUES
   ('筆ペン', '筆ペンを使った書'),
   ('硬筆', '鉛筆や万年筆などを使った書'),
   ('その他', 'その他の書体や道具を使った書')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
 
--- 初期データ: 現在の月のお題（存在しない場合のみ）
+-- 現在の月のお題を追加（存在しない場合のみ）
 DO $$
 DECLARE
   current_year INTEGER := EXTRACT(YEAR FROM CURRENT_DATE);
   current_month INTEGER := EXTRACT(MONTH FROM CURRENT_DATE);
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM public.themes WHERE year = current_year AND month = current_month) THEN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.themes 
+    WHERE year = current_year AND month = current_month
+  ) THEN
     INSERT INTO public.themes (title, description, year, month)
-    VALUES ('春風', '春の風を感じる書を表現してみましょう。', current_year, current_month);
+    VALUES (
+      CASE
+        WHEN current_month = 1 THEN '初春'
+        WHEN current_month = 2 THEN '梅花'
+        WHEN current_month = 3 THEN '春風'
+        WHEN current_month = 4 THEN '桜花'
+        WHEN current_month = 5 THEN '新緑'
+        WHEN current_month = 6 THEN '涼風'
+        WHEN current_month = 7 THEN '夏空'
+        WHEN current_month = 8 THEN '夕立'
+        WHEN current_month = 9 THEN '秋月'
+        WHEN current_month = 10 THEN '紅葉'
+        WHEN current_month = 11 THEN '晩秋'
+        WHEN current_month = 12 THEN '初雪'
+      END,
+      CASE
+        WHEN current_month = 1 THEN '新しい年の始まりを表現する書'
+        WHEN current_month = 2 THEN '梅の花のような繊細さを表現する書'
+        WHEN current_month = 3 THEN '春の風を感じさせる書'
+        WHEN current_month = 4 THEN '桜の美しさを表現する書'
+        WHEN current_month = 5 THEN '若葉の生命力を表現する書'
+        WHEN current_month = 6 THEN '涼やかな風を感じさせる書'
+        WHEN current_month = 7 THEN '夏の青空を表現する書'
+        WHEN current_month = 8 THEN '夏の雷雨の力強さを表現する書'
+        WHEN current_month = 9 THEN '秋の月の静けさを表現する書'
+        WHEN current_month = 10 THEN '秋の紅葉の美しさを表現する書'
+        WHEN current_month = 11 THEN '秋の終わりを感じさせる書'
+        WHEN current_month = 12 THEN '初雪の静けさを表現する書'
+      END,
+      current_year,
+      current_month
+    );
   END IF;
 END $$;
 
--- ストレージバケットのポリシー設定は管理コンソールから行う必要があります
--- 1. Storage > Buckets > New Bucket で "artworks" という名前の新しいバケットを作成
--- 2. RLS ポリシーとして以下を設定：
---    - 認証されたユーザーのみがファイルをアップロードできる
---    - すべてのユーザーがファイルを閲覧できる
---    - ファイルの所有者のみがファイルを削除できる
+-- 管理者ユーザーの設定（開発用）
+-- 注意: 実際の運用では手動で設定するか、別の方法で管理者を設定することを推奨
+DO $$
+DECLARE
+  admin_email TEXT := 'admin@example.com';
+  admin_exists BOOLEAN;
+BEGIN
+  -- 管理者ユーザーが存在するか確認
+  SELECT EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE email = admin_email AND role = 'admin'
+  ) INTO admin_exists;
+  
+  -- 存在しない場合は更新（auth.usersに既に存在することが前提）
+  IF NOT admin_exists THEN
+    UPDATE public.users
+    SET role = 'admin'
+    WHERE email = admin_email;
+  END IF;
+END $$;
