@@ -66,6 +66,18 @@ CREATE TABLE IF NOT EXISTS public.comments (
   FOREIGN KEY (artwork_id) REFERENCES public.artworks(id) ON DELETE CASCADE
 );
 
+-- お問い合わせテーブル
+CREATE TABLE IF NOT EXISTS public.contacts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  inquiry_type TEXT NOT NULL,
+  message TEXT NOT NULL,
+  user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+  status TEXT DEFAULT 'new' NOT NULL
+);
+
 -- テーブル権限の設定
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
@@ -73,139 +85,19 @@ ALTER TABLE public.themes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.artworks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
-
--- RLS (Row Level Security) ポリシー
-
--- ユーザーテーブルのポリシー
-CREATE POLICY "ユーザーは自身のプロフィールを更新可能" 
-ON public.users FOR UPDATE 
-USING (auth.uid() = id);
-
-CREATE POLICY "ユーザープロフィールは誰でも閲覧可能" 
-ON public.users FOR SELECT 
-USING (true);
-
--- カテゴリーテーブルのポリシー
-CREATE POLICY "カテゴリーは誰でも閲覧可能" 
-ON public.categories FOR SELECT 
-USING (true);
-
-CREATE POLICY "カテゴリーは管理者のみ作成可能" 
-ON public.categories FOR INSERT 
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.users 
-    WHERE id = auth.uid() AND role = 'admin'
-  )
-);
-
-CREATE POLICY "カテゴリーは管理者のみ更新可能" 
-ON public.categories FOR UPDATE 
-USING (
-  EXISTS (
-    SELECT 1 FROM public.users 
-    WHERE id = auth.uid() AND role = 'admin'
-  )
-);
-
-CREATE POLICY "カテゴリーは管理者のみ削除可能" 
-ON public.categories FOR DELETE 
-USING (
-  EXISTS (
-    SELECT 1 FROM public.users 
-    WHERE id = auth.uid() AND role = 'admin'
-  )
-);
-
--- 月間お題テーブルのポリシー
-CREATE POLICY "お題は誰でも閲覧可能" 
-ON public.themes FOR SELECT 
-USING (true);
-
-CREATE POLICY "お題は管理者のみ作成可能" 
-ON public.themes FOR INSERT 
-WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.users 
-    WHERE id = auth.uid() AND role = 'admin'
-  )
-);
-
-CREATE POLICY "お題は管理者のみ更新可能" 
-ON public.themes FOR UPDATE 
-USING (
-  EXISTS (
-    SELECT 1 FROM public.users 
-    WHERE id = auth.uid() AND role = 'admin'
-  )
-);
-
-CREATE POLICY "お題は管理者のみ削除可能" 
-ON public.themes FOR DELETE 
-USING (
-  EXISTS (
-    SELECT 1 FROM public.users 
-    WHERE id = auth.uid() AND role = 'admin'
-  )
-);
-
--- 作品テーブルのポリシー
-CREATE POLICY "作品は誰でも閲覧可能" 
-ON public.artworks FOR SELECT 
-USING (true);
-
-CREATE POLICY "作品は認証済みユーザーのみ投稿可能" 
-ON public.artworks FOR INSERT 
-WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "作品は作成者のみ更新可能" 
-ON public.artworks FOR UPDATE 
-USING (auth.uid() = user_id);
-
-CREATE POLICY "作品は作成者のみ削除可能" 
-ON public.artworks FOR DELETE 
-USING (auth.uid() = user_id);
-
--- いいねテーブルのポリシー
-CREATE POLICY "いいねは誰でも閲覧可能" 
-ON public.likes FOR SELECT 
-USING (true);
-
-CREATE POLICY "いいねは認証済みユーザーのみ追加可能" 
-ON public.likes FOR INSERT 
-WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "いいねは作成者のみ削除可能" 
-ON public.likes FOR DELETE 
-USING (auth.uid() = user_id);
-
--- コメントテーブルのポリシー
-CREATE POLICY "コメントは誰でも閲覧可能" 
-ON public.comments FOR SELECT 
-USING (true);
-
-CREATE POLICY "コメントは認証済みユーザーのみ投稿可能" 
-ON public.comments FOR INSERT 
-WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "コメントは作成者のみ更新可能" 
-ON public.comments FOR UPDATE 
-USING (auth.uid() = user_id);
-
-CREATE POLICY "コメントは作成者のみ削除可能" 
-ON public.comments FOR DELETE 
-USING (auth.uid() = user_id);
+ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
 
 -- ユーザー登録時の自動処理用関数
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.users (id, email, username, avatar_url)
+  INSERT INTO public.users (id, email, username, avatar_url, role)
   VALUES (
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
-    new.raw_user_meta_data->>'avatar_url'
+    new.raw_user_meta_data->>'avatar_url',
+    'user'  -- デフォルトでユーザー権限を付与
   );
   RETURN new;
 END;
@@ -216,6 +108,189 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- RLS (Row Level Security) ポリシー
+
+-- ユーザーテーブルのポリシー
+DROP POLICY IF EXISTS "ユーザーは自身のプロフィールを更新可能" ON public.users;
+CREATE POLICY "ユーザーは自身のプロフィールを更新可能" 
+ON public.users FOR UPDATE 
+USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "ユーザープロフィールは誰でも閲覧可能" ON public.users;
+CREATE POLICY "ユーザープロフィールは誰でも閲覧可能" 
+ON public.users FOR SELECT 
+USING (true);
+
+-- クライアント側からのユーザープロフィール作成を許可するポリシー
+DROP POLICY IF EXISTS "auth.uidに基づくユーザー作成" ON public.users;
+CREATE POLICY "auth.uidに基づくユーザー作成"
+ON public.users FOR INSERT
+WITH CHECK (auth.uid() = id);
+
+-- 管理者がユーザープロフィールを管理できるようにするポリシー
+DROP POLICY IF EXISTS "管理者はすべてのユーザーを管理可能" ON public.users;
+CREATE POLICY "管理者はすべてのユーザーを管理可能"
+ON public.users
+USING (
+    (SELECT role FROM public.users WHERE id = auth.uid()) = 'admin'
+);
+
+-- カテゴリーテーブルのポリシー
+DROP POLICY IF EXISTS "カテゴリーは誰でも閲覧可能" ON public.categories;
+CREATE POLICY "カテゴリーは誰でも閲覧可能" 
+ON public.categories FOR SELECT 
+USING (true);
+
+DROP POLICY IF EXISTS "カテゴリーは管理者のみ作成可能" ON public.categories;
+CREATE POLICY "カテゴリーは管理者のみ作成可能" 
+ON public.categories FOR INSERT 
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+DROP POLICY IF EXISTS "カテゴリーは管理者のみ更新可能" ON public.categories;
+CREATE POLICY "カテゴリーは管理者のみ更新可能" 
+ON public.categories FOR UPDATE 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+DROP POLICY IF EXISTS "カテゴリーは管理者のみ削除可能" ON public.categories;
+CREATE POLICY "カテゴリーは管理者のみ削除可能" 
+ON public.categories FOR DELETE 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+-- 月間お題テーブルのポリシー
+DROP POLICY IF EXISTS "お題は誰でも閲覧可能" ON public.themes;
+CREATE POLICY "お題は誰でも閲覧可能" 
+ON public.themes FOR SELECT 
+USING (true);
+
+DROP POLICY IF EXISTS "お題は管理者のみ作成可能" ON public.themes;
+CREATE POLICY "お題は管理者のみ作成可能" 
+ON public.themes FOR INSERT 
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+DROP POLICY IF EXISTS "お題は管理者のみ更新可能" ON public.themes;
+CREATE POLICY "お題は管理者のみ更新可能" 
+ON public.themes FOR UPDATE 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+DROP POLICY IF EXISTS "お題は管理者のみ削除可能" ON public.themes;
+CREATE POLICY "お題は管理者のみ削除可能" 
+ON public.themes FOR DELETE 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+-- 作品テーブルのポリシー
+DROP POLICY IF EXISTS "作品は誰でも閲覧可能" ON public.artworks;
+CREATE POLICY "作品は誰でも閲覧可能" 
+ON public.artworks FOR SELECT 
+USING (true);
+
+DROP POLICY IF EXISTS "作品は認証済みユーザーのみ投稿可能" ON public.artworks;
+CREATE POLICY "作品は認証済みユーザーのみ投稿可能" 
+ON public.artworks FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "作品は作成者のみ更新可能" ON public.artworks;
+CREATE POLICY "作品は作成者のみ更新可能" 
+ON public.artworks FOR UPDATE 
+USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "作品は作成者のみ削除可能" ON public.artworks;
+CREATE POLICY "作品は作成者のみ削除可能" 
+ON public.artworks FOR DELETE 
+USING (auth.uid() = user_id);
+
+-- いいねテーブルのポリシー
+DROP POLICY IF EXISTS "いいねは誰でも閲覧可能" ON public.likes;
+CREATE POLICY "いいねは誰でも閲覧可能" 
+ON public.likes FOR SELECT 
+USING (true);
+
+DROP POLICY IF EXISTS "いいねは認証済みユーザーのみ追加可能" ON public.likes;
+CREATE POLICY "いいねは認証済みユーザーのみ追加可能" 
+ON public.likes FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "いいねは作成者のみ削除可能" ON public.likes;
+CREATE POLICY "いいねは作成者のみ削除可能" 
+ON public.likes FOR DELETE 
+USING (auth.uid() = user_id);
+
+-- コメントテーブルのポリシー
+DROP POLICY IF EXISTS "コメントは誰でも閲覧可能" ON public.comments;
+CREATE POLICY "コメントは誰でも閲覧可能" 
+ON public.comments FOR SELECT 
+USING (true);
+
+DROP POLICY IF EXISTS "コメントは認証済みユーザーのみ投稿可能" ON public.comments;
+CREATE POLICY "コメントは認証済みユーザーのみ投稿可能" 
+ON public.comments FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "コメントは作成者のみ更新可能" ON public.comments;
+CREATE POLICY "コメントは作成者のみ更新可能" 
+ON public.comments FOR UPDATE 
+USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "コメントは作成者のみ削除可能" ON public.comments;
+CREATE POLICY "コメントは作成者のみ削除可能" 
+ON public.comments FOR DELETE 
+USING (auth.uid() = user_id);
+
+-- お問い合わせテーブルのポリシー
+DROP POLICY IF EXISTS "お問い合わせは管理者のみ閲覧可能" ON public.contacts;
+CREATE POLICY "お問い合わせは管理者のみ閲覧可能" 
+ON public.contacts FOR SELECT 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
+
+DROP POLICY IF EXISTS "お問い合わせは誰でも作成可能" ON public.contacts;
+CREATE POLICY "お問い合わせは誰でも作成可能" 
+ON public.contacts FOR INSERT 
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "お問い合わせは管理者のみ更新可能" ON public.contacts;
+CREATE POLICY "お問い合わせは管理者のみ更新可能" 
+ON public.contacts FOR UPDATE 
+USING (
+  EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+);
 
 -- 初期データの挿入
 -- カテゴリー

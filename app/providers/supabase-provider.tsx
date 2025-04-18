@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { createClientSupabaseClient } from '@/lib/supabase/client';
 import { User, SupabaseClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
@@ -116,7 +116,7 @@ export const SupabaseProvider = ({ children }: { children: React.ReactNode }) =>
     try {
       console.log('Signing up with email:', email);
       
-      // ステップ1: ユーザー認証の作成
+      // ユーザー認証の作成
       const { error: authError, data } = await supabase.auth.signUp({
         email,
         password,
@@ -133,34 +133,14 @@ export const SupabaseProvider = ({ children }: { children: React.ReactNode }) =>
       }
 
       console.log('Sign up auth successful, user created:', data.user?.id);
-
-      // ステップ2: ユーザープロファイルをデータベースに追加
-      if (data.user) {
-        try {
-          const { error: profileError } = await supabase
-            .from('users')
-            .insert({
-              id: data.user.id,
-              email: data.user.email!,
-              username,
-            });
-
-          if (profileError) {
-            // より詳細なエラーログ
-            console.error('Error creating user profile:', profileError);
-            console.error('Error details:', JSON.stringify(profileError));
-            throw profileError;
-          }
-          
-          console.log('User profile created successfully');
-        } catch (profileError) {
-          console.error('Profile creation exception:', profileError);
-          // エラーを表示するが、認証自体は成功しているのでスローはしない
-          console.error('Error creating user profile, but auth was successful');
-        }
-      }
+      
+      // ここでusersテーブルへの直接挿入は不要になります
+      // handle_new_user() トリガー関数が自動的にユーザーをテーブルに追加します
       
       router.refresh();
+      
+      // 成功を返す
+      return;
     } catch (error: any) {
       console.error('Sign up exception:', error);
       // エラーの詳細情報をログに出力
@@ -189,7 +169,7 @@ export const SupabaseProvider = ({ children }: { children: React.ReactNode }) =>
     }
   };
 
-  // アカウント削除機能を追加
+  // アカウント削除機能
   const deleteAccount = async () => {
     try {
       console.log('Deleting account...');

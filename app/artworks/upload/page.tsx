@@ -240,7 +240,20 @@ export default function UploadPage() {
       setUploadProgress(100); // 完了を示す
       
       // 成功したら作品詳細ページにリダイレクト
-      router.push(`/artworks/${insertData.id}`);
+      console.log('Redirecting to artwork page:', `/artworks/${insertData.id}`);
+      
+      // 重要：insertData.idが確実に存在することを確認
+      if (insertData && insertData.id) {
+        // 300msの遅延を入れてからリダイレクト（すべての処理が完了するのを待つ）
+        setTimeout(() => {
+          router.push(`/artworks/upload/${insertData.id}`);
+        }, 300);
+      } else {
+        setUploadError('作品IDの取得に失敗しました。作品一覧から確認してください。');
+        setTimeout(() => {
+          router.push('/artworks');
+        }, 1000);
+      }
       
     } catch (error: any) {
       let errorMessage = 'アップロード中にエラーが発生しました';
@@ -265,7 +278,6 @@ export default function UploadPage() {
         console.error('Error details:', JSON.stringify(error, null, 2));
       }
       setUploadError(errorMessage);
-    } finally {
       setIsSubmitting(false);
     }
   };

@@ -15,12 +15,14 @@ interface ArtworksPageProps {
   };
 }
 
-const ITEMS_PER_PAGE = 12;
-
 export default async function ArtworksPage({ searchParams }: ArtworksPageProps) {
   const supabase = createServerSupabaseClient();
-  const categoryId = searchParams.category;
-  const page = parseInt(searchParams.page || '1');
+  // searchParamsのプロパティにアクセスする前に変数に展開
+  const categoryParam = searchParams?.category;
+  const pageParam = searchParams?.page || '1';
+  
+  const categoryId = categoryParam;
+  const page = parseInt(pageParam);
   
   // カテゴリ一覧を取得
   const { data: categories } = await supabase
@@ -29,6 +31,8 @@ export default async function ArtworksPage({ searchParams }: ArtworksPageProps) 
     .order('name');
   
   // 作品を取得（ページネーション付き）
+  const ITEMS_PER_PAGE = 12;
+  
   let query = supabase
     .from('artworks')
     .select(`
