@@ -3,6 +3,14 @@ import './globals.css';
 import Header from '@/app/components/layout/header';
 import Footer from '@/app/components/layout/footer';
 import { SupabaseProvider } from '@/app/providers/supabase-provider';
+import { initializeStorage } from '@/lib/supabase/storage-setup';
+
+// アプリ起動時にストレージの初期化を試みる（サーバーサイドでのみ実行）
+if (typeof window === 'undefined') {
+  initializeStorage().catch(err => {
+    console.error('Failed to initialize storage buckets:', err);
+  });
+}
 
 export const metadata: Metadata = {
   title: 'syolink - 書道掲示板サービス',

@@ -246,7 +246,7 @@ export default function UploadPage() {
       if (insertData && insertData.id) {
         // 300msの遅延を入れてからリダイレクト（すべての処理が完了するのを待つ）
         setTimeout(() => {
-          router.push(`/artworks/upload/${insertData.id}`);
+          router.push(`/artworks/${insertData.id}`);
         }, 300);
       } else {
         setUploadError('作品IDの取得に失敗しました。作品一覧から確認してください。');

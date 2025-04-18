@@ -62,12 +62,25 @@ export async function middleware(req: NextRequest) {
     
     // 管理者ページの場合で、セッションがある場合のみ管理者権限をチェック
     if (isAdminPage && session) {
-      // ユーザーのメタデータから管理者権限を確認
-      const isAdmin = session.user.user_metadata?.role === 'admin';
+      // ユーザーのIDを取得
+      const userId = session.user.id;
       
+      // ユーザーの役割を取得
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching user role:', error);
+        return NextResponse.redirect(new URL('/', req.url));
+      }
+      
+      // 管理者でない場合はホームページにリダイレクト
+      const isAdmin = userData?.role === 'admin';
       if (!isAdmin) {
         console.log('Admin page access denied, redirecting to home');
-        // 管理者でない場合はホームページにリダイレクト
         return NextResponse.redirect(new URL('/', req.url));
       }
     }

@@ -16,10 +16,14 @@ interface ArtworksPageProps {
 }
 
 export default async function ArtworksPage({ searchParams }: ArtworksPageProps) {
+  // searchParamsを非同期で解決
+  const resolvedParams = await Promise.resolve(searchParams);
+  
   const supabase = createServerSupabaseClient();
-  // searchParamsのプロパティにアクセスする前に変数に展開
-  const categoryParam = searchParams?.category;
-  const pageParam = searchParams?.page || '1';
+  
+  // 解決されたパラメータを使用
+  const categoryParam = resolvedParams?.category;
+  const pageParam = resolvedParams?.page || '1';
   
   const categoryId = categoryParam;
   const page = parseInt(pageParam);

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Category } from '@/lib/supabase/schema';
 
 interface CategoryTabsProps {
@@ -11,6 +12,18 @@ interface CategoryTabsProps {
 
 export default function CategoryTabs({ categories, selectedCategoryId }: CategoryTabsProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(selectedCategoryId || null);
+  const router = useRouter();
+
+  const handleCategoryChange = (categoryId: string | null) => {
+    setActiveCategory(categoryId);
+    
+    // カテゴリー変更時のURLパラメータ更新
+    if (categoryId) {
+      router.push(`/artworks?category=${categoryId}`);
+    } else {
+      router.push('/artworks');
+    }
+  };
 
   return (
     <div className="mb-6 overflow-x-auto">
@@ -21,7 +34,7 @@ export default function CategoryTabs({ categories, selectedCategoryId }: Categor
               ? 'bg-primary-500 text-white'
               : 'text-gray-600 hover:text-primary-500'
           }`}
-          onClick={() => setActiveCategory(null)}
+          onClick={() => handleCategoryChange(null)}
         >
           すべて
         </button>
@@ -34,7 +47,7 @@ export default function CategoryTabs({ categories, selectedCategoryId }: Categor
                 ? 'bg-primary-500 text-white'
                 : 'text-gray-600 hover:text-primary-500'
             }`}
-            onClick={() => setActiveCategory(category.id)}
+            onClick={() => handleCategoryChange(category.id)}
           >
             {category.name}
           </button>
